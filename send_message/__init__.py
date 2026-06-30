@@ -8,10 +8,10 @@
 --------
 添加新平台只需 **2 步**：
 
-1. 新建 ``send_message/qq.py``，实现以下模块级接口::
+1. 新建 ``send_message/<new_platform>.py``，实现以下模块级接口::
 
-    CHANNEL_NAME = "QQ"                   # 显示名称
-    REQUIRED_KEYS = {"bot_id", ...}        # 必填配置字段
+    CHANNEL_NAME = "<显示名称>"                   # 显示名称
+    REQUIRED_KEYS = {"field1", "field2"}          # 必填配置字段
 
     def resolve_config(bot_cfg: dict, toml_data: dict) -> dict:
         \"""从 ``~/.reasonix/config.toml`` 解析本平台配置。\"""
@@ -28,6 +28,7 @@ from typing import Any, Dict
 
 from send_message import feishu
 from send_message import weixin
+from send_message import qq
 
 # sender 模块注册表
 # key: 配置中的平台名，value: 模块对象
@@ -43,5 +44,5 @@ def _register(senders: Dict[str, Any]) -> None:
 _register({
     "feishu": feishu,
     "weixin": weixin,
+    "qq": qq,
 })
-

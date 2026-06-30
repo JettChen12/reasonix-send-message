@@ -10,10 +10,23 @@
 """
 
 import argparse
+import logging
 import sys
 
 from send_message import SENDERS
 from send_message.config import resolve_config, get_text_source, ConfigError
+
+logger = logging.getLogger(__name__)
+
+
+def _setup_logging(verbose: bool = False) -> None:
+    """配置日志输出。"""
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
 
 def _resolve_text(args: argparse.Namespace, cfg: dict) -> str:
@@ -67,9 +80,17 @@ def _setup_encoding() -> None:
 
 def main() -> None:
     _setup_encoding()
-    parser = argparse.ArgumentParser(description="向飞书和微信发送文本消息")
+    parser = argparse.ArgumentParser(description="向飞书、微信、QQ 等 Bot 发送文本消息")
     parser.add_argument("text", nargs="?", default="", help="消息文本内容")
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="输出调试信息（包括配置详情、API 请求日志等）",
+    )
     args = parser.parse_args()
+
+    _setup_logging(verbose=args.verbose)
+    logger.info("reasonix-send-message 启动")
 
     # 加载配置
     try:
@@ -79,32 +100,39 @@ def main() -> None:
         sys.exit(1)
 
     text = _resolve_text(args, cfg)
+    logger.debug("消息文本（前 50 字符）: %s", text[:50])
 
     # 通过注册表遍历所有 sender
     results = []
     for name, sender in SENDERS.items():
         platform_cfg = cfg.get(name, {})
         if not platform_cfg.get("enabled", False):
+            logger.info("%s: 已禁用，跳过", getattr(sender, "CHANNEL_NAME", name))
             continue
 
+        channel_name = getattr(sender, "CHANNEL_NAME", name)
+
         # 校验必填字段
-        missing = [k for k in sender.REQUIRED_KEYS if not platform_cfg.get(k)]
+        required = getattr(sender, "REQUIRED_KEYS", set())
+        missing = [k for k in required if not platform_cfg.get(k)]
         if missing:
             results.append({
                 "ok": False,
                 "code": "missing",
                 "msg": (
-                    f"{sender.CHANNEL_NAME} 缺少必填配置: "
+                    f"{channel_name} 缺少必填配置: "
                     f"{', '.join(missing)}。"
                     f"请检查 ~/.reasonix/config.toml 对应字段。"
                 ),
-                "channel": sender.CHANNEL_NAME,
+                "channel": channel_name,
             })
+            logger.warning("%s: 缺少必填配置 %s", channel_name, missing)
             continue
 
         # 发送
+        logger.info("%s: 发送中…", channel_name)
         result = sender.send(text, cfg)
-        result["channel"] = sender.CHANNEL_NAME
+        result["channel"] = channel_name
         results.append(result)
 
     if not results:
