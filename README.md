@@ -4,11 +4,7 @@
 
 ## 快速开始
 
-### 1. 配置机器人
-
-确保你已通过 Reasonix 完成飞书、微信和 QQ 的机器人扫码登录。登录后 Reasonix 会自动在 `~/.reasonix/` 下生成所需的配置文件和 Token。
-
-### 2. 安装 Skill
+### 1. 安装 Skill
 
 #### 方式一：手动安装
 
@@ -27,6 +23,16 @@ cp -r reasonix-send-message /path/to/your-project/.reasonix/skills/reasonix-send
 > 请根据 AI_INSTALL.md 安装 reasonix-send-message skill
 
 AI 会自动读取 `AI_INSTALL.md` 并执行安装步骤。
+
+---
+
+**无需预先配置 Bot**：如果还没有配置，首次发送消息时自动进入配置引导：
+
+```
+python send.py "Hello World"
+```
+
+然后按提示选择扫码或手动输入即可自动完成配置。
 
 ### 3. 发送消息
 

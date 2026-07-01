@@ -15,6 +15,7 @@ import sys
 
 from send_message import SENDERS
 from send_message.config import resolve_config, get_text_source, ConfigError
+from send_message.setup import ensure_bot_config
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,11 @@ def main() -> None:
 
     _setup_logging(verbose=args.verbose)
     logger.info("reasonix-send-message 启动")
+
+    # 确保有配置 — 没有就引导用户扫码/手动输入
+    if not ensure_bot_config():
+        print("⚠️  未配置 Bot，退出。")
+        sys.exit(1)
 
     # 加载配置
     try:
