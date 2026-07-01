@@ -12,9 +12,28 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# ---------- 路径常量 ----------
+# ---------- 路径解析 ----------
 
-REASONIX_DIR = Path.home() / ".reasonix"
+
+def _resolve_reasonix_dir() -> Path:
+    """解析 Reasonix 配置目录，与桌面端保持一致。
+
+    桌面端在不同平台的存储路径：
+    - Windows:  ``%APPDATA%/reasonix/``（如 ``C:\\Users\\<user>\\AppData\\Roaming\\reasonix``）
+    - macOS:    ``~/.reasonix/``
+    - Linux:    ``$XDG_CONFIG_HOME/reasonix/`` 或 ``~/.reasonix/``
+    """
+    if os.name == "nt":
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            return Path(appdata) / "reasonix"
+    xdg = os.environ.get("XDG_CONFIG_HOME", "")
+    if xdg:
+        return Path(xdg) / "reasonix"
+    return Path.home() / ".reasonix"
+
+
+REASONIX_DIR = _resolve_reasonix_dir()
 CONFIG_TOML = REASONIX_DIR / "config.toml"
 DOTENV_FILE = REASONIX_DIR / ".env"
 
@@ -50,8 +69,23 @@ def _check_toml_lib() -> None:
         )
 
 
+def _find_existing(path: Path, fallback_rel: str) -> Path:
+    """在 *path* 不存在时，尝试 ``Path.home() / ".reasonix" / fallback_rel`` 作为回退。"""
+    if path.exists():
+        return path
+    fallback = Path.home() / ".reasonix" / fallback_rel
+    if fallback.exists():
+        logger.info("使用回退路径: %s", fallback)
+        return fallback
+    return path  # 返回首选路径，由调用方报错
+
+
 def read_toml(path: Path) -> Dict[str, Any]:
-    """读取并解析 TOML 配置文件。"""
+    """读取并解析 TOML 配置文件。
+
+    若 *path* 不存在，会尝试 ``~/.reasonix/config.toml`` 作为回退。
+    """
+    path = _find_existing(path, "config.toml")
     _check_toml_lib()
     if not path.exists():
         raise ConfigSourceError(
@@ -73,7 +107,11 @@ def read_toml(path: Path) -> Dict[str, Any]:
 
 
 def read_dotenv(path: Path) -> Dict[str, str]:
-    """解析 .env 文件为键值对（简单实现，无外部依赖）。"""
+    """解析 .env 文件为键值对（简单实现，无外部依赖）。
+
+    若 *path* 不存在，会尝试 ``~/.reasonix/.env`` 作为回退。
+    """
+    path = _find_existing(path, ".env")
     if not path.exists():
         logger.debug(".env 文件不存在: %s", path)
         return {}
@@ -96,8 +134,12 @@ def read_dotenv(path: Path) -> Dict[str, str]:
 
 
 def load_dotenv_into_environ() -> None:
-    """将 ``~/.reasonix/.env`` 中的变量加载到 ``os.environ``（不覆盖已存在的）。"""
-    env_vars = read_dotenv(DOTENV_FILE)
+    """将 Reasonix ``.env`` 中的变量加载到 ``os.environ``（不覆盖已存在的）。
+
+    优先读取桌面端路径，回退到 ``~/.reasonix/.env``。
+    """
+    dotenv_path = _find_existing(DOTENV_FILE, ".env")
+    env_vars = read_dotenv(dotenv_path)
     loaded = 0
     skipped = 0
     for key, val in env_vars.items():

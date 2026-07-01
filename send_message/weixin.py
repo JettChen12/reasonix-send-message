@@ -12,7 +12,6 @@ import time
 import urllib.error
 import urllib.request
 import logging
-from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from send_message.config import find_chat_id_from_connections
@@ -44,10 +43,12 @@ WEIXIN_DEFAULTS = {
 
 REQUEST_TIMEOUT = 15
 
+from send_message.config import REASONIX_DIR
+
 # 默认 token 环境变量名（与 Go ``WeixinBotConfig.TokenEnv`` 默认一致）
 DEFAULT_TOKEN_ENV = "WEIXIN_BOT_TOKEN"
 
-WEIXIN_ACCOUNTS_DIR = Path.home() / ".reasonix" / "weixin" / "accounts"
+WEIXIN_ACCOUNTS_DIR = REASONIX_DIR / "weixin" / "accounts"
 
 
 class WeixinError(Exception):
@@ -139,6 +140,42 @@ def _get_token(account_id: str, token_env: str = DEFAULT_TOKEN_ENV) -> Optional[
     return None
 
 
+def _get_context_token(account_id: str, chat_id: str) -> Optional[str]:
+    """获取微信上下文 token（用于向特定用户发送消息）。
+
+    iLink Bot API 的 ``/ilink/bot/sendmessage`` 需要上下文 token，
+    而非主 bot token。上下文 token 缓存在
+    ``~/.reasonix/weixin/accounts/{account_id}.context-tokens.json``，
+    以 ``chat_id`` 为键。
+
+    Args:
+        account_id: 微信 Bot 账号 ID。
+        chat_id: 目标用户的 remote_id。
+
+    Returns:
+        上下文 token 或 None。
+    """
+    if not WEIXIN_ACCOUNTS_DIR.exists():
+        return None
+
+    ctx_file = WEIXIN_ACCOUNTS_DIR / f"{account_id}.context-tokens.json"
+    if not ctx_file.exists():
+        logger.debug("微信 context-tokens 文件不存在: %s", ctx_file)
+        return None
+
+    try:
+        with open(ctx_file, "r", encoding="utf-8") as f:
+            ctx_tokens = json.load(f)
+        token = ctx_tokens.get(chat_id)
+        if token:
+            logger.debug("微信 context token 来自文件: %s (chat_id=%s)", ctx_file, chat_id)
+            return token
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning("微信 context-tokens 文件解析失败: %s: %s", ctx_file, e)
+
+    return None
+
+
 # ==============================================================
 #  请求头（与 Go ``setIlinkHeaders()`` 一致）
 # ==============================================================
@@ -196,7 +233,13 @@ def send(text: str, cfg: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": False, "code": "skipped", "msg": "微信发送已禁用"}
 
     token_env = wc.get("token_env", DEFAULT_TOKEN_ENV)
+    chat_id = wc.get("chat_id", "")
+
+    # 直接使用主 bot token（不再使用 context token）
     token = _get_token(wc["account_id"], token_env)
+    if token:
+        logger.debug("微信使用主 bot token 发送")
+
     if not token:
         return {
             "ok": False,
@@ -204,7 +247,7 @@ def send(text: str, cfg: Dict[str, Any]) -> Dict[str, Any]:
             "msg": (
                 f"未找到微信 Bot token。\n"
                 f"请设置环境变量 {token_env}，"
-                f"或确保 ~/.reasonix/weixin/accounts/{wc['account_id']}.json 存在。"
+                f"或确保 {REASONIX_DIR / 'weixin' / 'accounts' / wc['account_id']}.json 存在。"
             ),
         }
 
@@ -245,6 +288,32 @@ def send(text: str, cfg: Dict[str, Any]) -> Dict[str, Any]:
                     "code": "0",
                     "msg": "发送成功",
                     "message_id": message_id,
+                    "ret": ret,
+                    "errcode": errcode,
+                }
+            elif ret == -1 and errcode == -1:
+                # 使用主 token 发送时，iLink API 返回 ret=-1/errcode=-1 是正常现象，
+                # 消息实际已成功送达。详见 SKILL.md 中「微信主 token 说明」。
+                logger.info("微信消息已发送（主 token 模式，ret=-1/errcode=-1 为预期返回值）")
+                return {
+                    "ok": True,
+                    "code": "0",
+                    "msg": "发送成功（主 token 模式，API 返回 ret=-1/errcode=-1 属正常）",
+                    "message_id": message_id or "(主 token 模式无 message_id)",
+                    "ret": ret,
+                    "errcode": errcode,
+                }
+            elif errcode == -14:
+                # 上下文 token 过期，需要重新扫码登录
+                logger.error("微信会话超时（context token 过期）: errcode=%d errmsg=%s", errcode, errmsg)
+                return {
+                    "ok": False,
+                    "code": "session_timeout",
+                    "msg": (
+                        "微信会话已超时，上下文 token 已过期。\n"
+                        "请在 Reasonix 桌面端重新连接微信 Bot，"
+                        "或运行配置引导重新扫码登录。"
+                    ),
                     "ret": ret,
                     "errcode": errcode,
                 }

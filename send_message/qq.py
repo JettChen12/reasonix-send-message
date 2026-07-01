@@ -118,7 +118,7 @@ def _get_app_secret(cfg: Dict[str, Any]) -> str:
         raise ConfigError(
             f"环境变量 {env_key} 未设置或为空。\n"
             f"请将其设置为 QQ Bot App Secret，"
-            f"或检查 ~/.reasonix/.env 中是否包含此变量。"
+            f"或检查 Reasonix .env 文件中是否包含此变量。"
         )
     return secret
 

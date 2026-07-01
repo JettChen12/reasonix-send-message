@@ -15,6 +15,7 @@ import sys
 
 from send_message import SENDERS
 from send_message.config import resolve_config, get_text_source, ConfigError
+from send_message.setup import ensure_bot_config
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="向飞书、微信、QQ 等 Bot 发送文本消息")
     parser.add_argument("text", nargs="?", default="", help="消息文本内容")
     parser.add_argument(
+        "-c", "--channel",
+        action="append",
+        dest="channels",
+        choices=["feishu", "weixin", "qq"],
+        help="指定发送渠道（可重复使用），不指定则发送所有已启用渠道。"
+        " 例如：-c weixin  或  -c weixin -c feishu",
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="输出调试信息（包括配置详情、API 请求日志等）",
@@ -91,6 +100,11 @@ def main() -> None:
 
     _setup_logging(verbose=args.verbose)
     logger.info("reasonix-send-message 启动")
+
+    # 确保有配置 — 没有就引导用户扫码/手动输入
+    if not ensure_bot_config():
+        print("⚠️  未配置 Bot，退出。")
+        sys.exit(1)
 
     # 加载配置
     try:
@@ -102,9 +116,13 @@ def main() -> None:
     text = _resolve_text(args, cfg)
     logger.debug("消息文本（前 50 字符）: %s", text[:50])
 
-    # 通过注册表遍历所有 sender
+    # 通过注册表遍历所有 sender，按 --channel 过滤
     results = []
+    selected = args.channels  # None 表示全部
     for name, sender in SENDERS.items():
+        if selected and name not in selected:
+            logger.debug("%s: 未在 --channel 指定，跳过", name)
+            continue
         platform_cfg = cfg.get(name, {})
         if not platform_cfg.get("enabled", False):
             logger.info("%s: 已禁用，跳过", getattr(sender, "CHANNEL_NAME", name))
@@ -122,7 +140,7 @@ def main() -> None:
                 "msg": (
                     f"{channel_name} 缺少必填配置: "
                     f"{', '.join(missing)}。"
-                    f"请检查 ~/.reasonix/config.toml 对应字段。"
+                    f"请检查 Reasonix 配置文件中对应字段。"
                 ),
                 "channel": channel_name,
             })
