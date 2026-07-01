@@ -1,23 +1,48 @@
 # AI Install Guide: reasonix-send-message
 
-本文档供 AI agent 使用。当用户说"帮我装这个 skill"时，按此文档执行。
+本文档供 AI agent（如 Claude Code）使用。当用户说"帮我装这个 skill"时，按此文档执行。
+
+项目地址：https://github.com/JettChen12/reasonix-send-message
 
 ---
 
 ## 1. 项目概览
 
 Reasonix Skill，通过 Python 脚本向飞书、微信 Bot 和 QQ Bot 发送文本消息。
-所有配置从 `~/.reasonix/` 读取，**不依赖本地 config.json**。
+所有配置从 `~/.reasonix/`（或 `%APPDATA%/reasonix/`）读取，**不依赖本地 config.json**。
+
+- **编程语言**：Python 3.8+
+- **外部依赖**：无（仅使用 Python 标准库）
+- **可选依赖**：`tomli`（仅 Python 3.8–3.10 需要）
+- **许可证**：MIT
 
 ## 2. 安装步骤
 
-### 2.1 放置文件
+### 2.1 克隆仓库
 
-将整个 `reasonix-send-message` 目录复制到用户 Reasonix 项目的 skills 目录：
+```bash
+git clone https://github.com/JettChen12/reasonix-send-message.git
+cd reasonix-send-message
+```
+
+### 2.2 放置文件
+
+将 `reasonix-send-message` 目录复制到用户 Reasonix 项目的 skills 目录：
 
 ```
 目标位置: {project_root}/.reasonix/skills/reasonix-send-message/
 ```
+
+如果当前就在用户项目中，直接执行：
+
+```bash
+cp -r reasonix-send-message .reasonix/skills/reasonix-send-message/
+```
+
+> **符号链接（推荐）**：如果用符号链接，后续拉取更新即可自动生效：
+> ```bash
+> ln -s $(pwd)/reasonix-send-message .reasonix/skills/
+> ```
 
 ### 2.2 检查 Python 环境
 
